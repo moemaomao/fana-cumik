@@ -3,7 +3,14 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * Hitomi.la – pakai ltn.gold-usergeneratedcontent.net saja
+ * Hitomi.la adapter (full refactor)
+ *
+ * - Index   : binary .nozomi @ ltn.gold-usergeneratedcontent.net
+ * - List    : galleryblock/{id}.html (fallback galleries/{id}.js)
+ * - Detail  : galleries/{id}.js → galleryinfo
+ * - Pages   : hash + gg.js → CDN gold-usergeneratedcontent.net
+ *
+ * ID format: "/{numericId}"  (leading slash wajib biar route /manga/hitomi/{id} cocok)
  */
 export class HitomiSource extends BaseSource {
 	id = 'hitomi';
@@ -17,6 +24,8 @@ export class HitomiSource extends BaseSource {
 	private ggM = new Set<number>();
 	private ggO = 0;
 	private ggLoadedAt = 0;
+
+	// ── HTTP helpers ─────────────────────────────────────────────────────────
 
 	private h(): Record<string, string> {
 		return {
@@ -37,10 +46,11 @@ export class HitomiSource extends BaseSource {
 		const res = await fetch(url, {
 			headers: { ...this.h(), Range: range }
 		});
-		// 200 atau 206 OK
 		if (!res.ok && res.status !== 206) throw new Error(`HTTP ${res.status} ${url}`);
 		return res.arrayBuffer();
 	}
+
+	// ── Nozomi / gg.js ───────────────────────────────────────────────────────
 
 	private parseNozomi(buf: ArrayBuffer): number[] {
 		const view = new DataView(buf);
@@ -63,6 +73,7 @@ export class HitomiSource extends BaseSource {
 		for (const m of js.matchAll(/case\s+(\d+):/g)) {
 			this.ggM.add(parseInt(m[1], 10));
 		}
+
 		const oMatch = js.match(/var\s+o\s*=\s*(\d+)/);
 		this.ggO = oMatch ? parseInt(oMatch[1], 10) : 0;
 		this.ggLoadedAt = now;
@@ -82,11 +93,12 @@ export class HitomiSource extends BaseSource {
 	}
 
 	private thumbFromHash(hash: string): string {
-		// path: last1 / last3 / hash
 		const a = hash.slice(-1);
 		const b = hash.slice(-3);
 		return `https://tn.${this.cdn}/webpbigtn/${a}/${b}/${hash}.webp`;
 	}
+
+	// ── Gallery parsing ──────────────────────────────────────────────────────
 
 	private parseGalleryInfo(js: string): any {
 		const idx = js.indexOf('{');
@@ -96,13 +108,22 @@ export class HitomiSource extends BaseSource {
 		return JSON.parse(raw);
 	}
 
-	/** galleryblock HTML → title + cover (lebih ringan dari .js penuh) */
+	private toId(gid: number | string): string {
+		const n = String(gid).replace(/\D/g, '');
+		return `/${n}`;
+	}
+
+	private extractGid(mangaId: string): string {
+		return String(mangaId).replace(/\D/g, '');
+	}
+
+	/** galleryblock HTML → Manga */
 	private parseBlock(html: string, gid: number): Manga | null {
 		const $ = cheerio.load(html);
 		const a = $('a.lillie, a[href*=".html"]').first();
-		const href = a.attr('href') || '';
 		const title =
-			$('h1 a, .lillie').first().text().trim() ||
+			$('h1 a').first().text().trim() ||
+			$('.lillie').first().text().trim() ||
 			a.text().trim() ||
 			`Gallery ${gid}`;
 
@@ -111,35 +132,37 @@ export class HitomiSource extends BaseSource {
 			$('img').attr('data-src') ||
 			$('img').attr('src') ||
 			'';
-		if (cover.startsWith('//')) cover = 'https:' + cover;
-		// ganti tn.hitomi.la → tn.gold-usergeneratedcontent.net
+		if (cover.startsWith('//')) cover = `https:${cover}`;
 		cover = cover.replace('tn.hitomi.la', `tn.${this.cdn}`);
 
-		if (!title) return null;
+		const clean = title.replace(/\s+/g, ' ').trim();
+		if (!clean) return null;
+
 		return {
-			id: String(gid),
-			title: title.replace(/\s+/g, ' ').trim(),
+			id: this.toId(gid),
+			title: clean,
 			cover,
 			sourceId: this.id
 		};
 	}
 
+	/** Load brief metadata for one gallery */
 	private async loadBrief(gid: number): Promise<Manga | null> {
 		try {
-			// 1) coba galleryblock (ringan)
 			const block = await this.getText(`${this.ltn}/galleryblock/${gid}.html`);
 			const fromBlock = this.parseBlock(block, gid);
 			if (fromBlock) return fromBlock;
 		} catch {
-			/* fallback ke .js */
+			/* fallback */
 		}
+
 		try {
 			const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
 			const info = this.parseGalleryInfo(js);
 			const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
 			const hash = info.files?.[0]?.hash || '';
 			return {
-				id: String(gid),
+				id: this.toId(gid),
 				title,
 				cover: hash ? this.thumbFromHash(hash) : '',
 				sourceId: this.id
@@ -159,27 +182,22 @@ export class HitomiSource extends BaseSource {
 			const start = (p - 1) * per * 4;
 			const end = start + per * 4 - 1;
 
-			console.log(`[Hitomi] nozomi bytes=${start}-${end}`);
 			const buf = await this.getBuf(
 				`${this.ltn}/index-all.nozomi`,
 				`bytes=${start}-${end}`
 			);
 			const ids = this.parseNozomi(buf);
-			console.log(`[Hitomi] ids=${ids.length}`, ids.slice(0, 5));
-
 			if (!ids.length) return [];
 
 			const out: Manga[] = [];
-			// parallel 3
 			for (let i = 0; i < ids.length; i += 3) {
 				const chunk = ids.slice(i, i + 3);
 				const rows = await Promise.all(chunk.map((id) => this.loadBrief(id)));
 				for (const m of rows) if (m) out.push(m);
 			}
-			console.log(`[Hitomi] parsed=${out.length}`);
 			return out;
 		} catch (e) {
-			console.error('[Hitomi] getLatestManga FAIL', e);
+			console.error('[Hitomi] getLatestManga', e);
 			return [];
 		}
 	}
@@ -216,13 +234,17 @@ export class HitomiSource extends BaseSource {
 			}
 			return out;
 		} catch (e) {
-			console.error('[Hitomi] search FAIL', e);
+			console.error('[Hitomi] searchManga', e);
 			return [];
 		}
 	}
 
+	// ── Details ──────────────────────────────────────────────────────────────
+
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-		const gid = String(mangaId).replace(/\D/g, '');
+		const gid = this.extractGid(mangaId);
+		if (!gid) throw new Error(`Invalid Hitomi id: ${mangaId}`);
+
 		const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
 		const info = this.parseGalleryInfo(js);
 		await this.ensureGg().catch(() => undefined);
@@ -230,10 +252,13 @@ export class HitomiSource extends BaseSource {
 		const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
 		const hash = info.files?.[0]?.hash || '';
 		const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
+		const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
 		const tags = (info.tags || []).map((t: any) => t.tag).filter(Boolean);
 
+		const id = this.toId(gid);
+
 		return {
-			id: gid,
+			id,
 			sourceId: this.id,
 			title,
 			cover: hash ? this.thumbFromHash(hash) : '',
@@ -242,19 +267,31 @@ export class HitomiSource extends BaseSource {
 				(info.language_localname || info.language) &&
 					`Language: ${info.language_localname || info.language}`,
 				artists.length && `Artists: ${artists.join(', ')}`,
+				groups.length && `Groups: ${groups.join(', ')}`,
 				info.files && `Pages: ${info.files.length}`
 			]
 				.filter(Boolean)
 				.join('\n'),
-			authors: artists,
+			authors: artists.length ? artists : groups,
 			genres: tags,
 			status: 'Completed',
-			chapters: [{ id: gid, title: 'Read', number: 1, date: info.date || '' }]
+			chapters: [
+				{
+					id, // sama dengan manga id → reader /read/hitomi/{id}
+					title: 'Read',
+					number: 1,
+					date: info.date || ''
+				}
+			]
 		};
 	}
 
+	// ── Pages ────────────────────────────────────────────────────────────────
+
 	async getChapterPages(chapterId: string): Promise<string[]> {
-		const gid = String(chapterId).replace(/\D/g, '');
+		const gid = this.extractGid(chapterId);
+		if (!gid) return [];
+
 		const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
 		const info = this.parseGalleryInfo(js);
 		await this.ensureGg();
