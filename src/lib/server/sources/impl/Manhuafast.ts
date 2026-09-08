@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
  * WeLoMa (weloma.net) Adapter – fixed selectors
  */
 export class ManhuafastSource extends BaseSource {
-	id = 'manhuafast';
+	id = 'weloma';
 	name = 'WeLoMa';
 	baseUrl = 'https://weloma.net';
 
