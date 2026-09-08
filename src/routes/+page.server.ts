@@ -1,32 +1,35 @@
 /**
- * Home Page - Server Load Function
- *
- * Fetches popular manga from the default source.
+ * Home Page - Server Load
+ * Fetch manga list by source / search / page.
+ * Cache pendek agar ganti source tidak nempel data lama.
  */
 
 import { getAllSources, getSource } from '$lib/server/sources';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url, setHeaders }) => {
-	// Get source from URL params, fallback to asura if none specified
-	// Client-side will handle redirecting to stored impl if needed
+export const load: PageServerLoad = async ({ url, setHeaders, depends }) => {
 	const sourceId = url.searchParams.get('source') || 'asura';
-	const page = parseInt(url.searchParams.get('page') || '1');
-	const query = url.searchParams.get('q') || '';
+	const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
+	const query = (url.searchParams.get('q') || '').trim();
+
+	// Biar invalidate('browse') dari client ikut ke-trigger
+	depends(`browse:${sourceId}`);
 
 	try {
 		const adapter = getSource(sourceId);
 		const sources = getAllSources();
 
-		// Fetch manga based on search or popular
-		const mangas = query ? await adapter.searchManga(query) : await adapter.getLatestManga(page);
+		const mangas = query
+			? await adapter.searchManga(query)
+			: await adapter.getLatestManga(page);
 
-		// Cache popular listings for 30 minutes
 		setHeaders({
-			'Cache-Control': query
-				? 'public, max-age=60, s-maxage=300'
-				: 'public, max-age=300, s-maxage=1800'
+			// Jangan cache agresif di browser — ganti source harus fresh
+			'Cache-Control': 'private, no-cache, max-age=0, must-revalidate',
+			// CDN boleh cache singkat per-URL (URL sudah beda karena ?source=)
+			// SvelteKit/Workers: s-maxage tetap aman karena query string unik
+			// 'CDN-Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30'
 		});
 
 		return {
@@ -37,7 +40,7 @@ export const load: PageServerLoad = async ({ url, setHeaders }) => {
 			searchQuery: query
 		};
 	} catch (e) {
-		console.error('Failed to load manga:', e);
+		console.error('[Browse] Failed to load manga:', e);
 		throw error(500, { message: 'Failed to load manga' });
 	}
 };
