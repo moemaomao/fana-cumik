@@ -4,8 +4,10 @@
 	const { data }: { data: PageData } = $props();
 	let { manga, source } = $derived(data);
 
+	// State untuk sorting, view mode, dan server selection
 	let sortNewest = $state(true);
-	let viewMode = $state<'list' | 'grid'>('list');
+	let viewMode = $state<'grid' | 'text' | 'list'>('grid');
+	let activeServer = $state<'sv1' | 'sv2' | 'es'>('sv1');
 
 	let chapters = $derived(
 		[...(manga.chapters || [])].sort((a, b) =>
@@ -58,7 +60,6 @@
 	<meta name="description" content={synopsis?.slice(0, 160) || manga.title} />
 </svelte:head>
 
-<!-- Lebar mendekati area konten Mikoroku -->
 <div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f1e] shadow-2xl">
 		{#if manga.cover}
@@ -70,10 +71,9 @@
 		{/if}
 
 		<div class="relative z-10 p-5 sm:p-8">
-			<!-- Header: cover kiri + info kanan (lebar) -->
+			<!-- Header Info Manga -->
 			<div class="flex flex-col gap-6 md:flex-row md:gap-8">
-				
-				<!-- Kolom Cover Kiri (Cover + Rating + Bookmark) -->
+				<!-- Cover & Actions -->
 				<div class="mx-auto flex w-[150px] shrink-0 flex-col items-center gap-3 sm:w-[170px] md:mx-0 md:w-[190px]">
 					<div class="aspect-[2/3] w-full overflow-hidden rounded-xl bg-zinc-900 shadow-xl ring-1 ring-white/10">
 						{#if manga.cover}
@@ -89,7 +89,6 @@
 						{/if}
 					</div>
 
-					<!-- Rating Bintang -->
 					<div class="flex items-center gap-1.5 text-sm font-semibold text-yellow-400">
 						<div class="flex text-amber-400">
 							{#each Array(5) as _, i}
@@ -99,7 +98,6 @@
 						<span class="text-xs text-zinc-300">8.2</span>
 					</div>
 
-					<!-- Tombol Bookmark -->
 					<button
 						type="button"
 						class="flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 py-2.5 text-sm font-medium text-white transition hover:bg-white/20"
@@ -109,7 +107,7 @@
 					</button>
 				</div>
 
-				<!-- Info Kanan -->
+				<!-- Info Metadata -->
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold leading-snug text-white sm:text-2xl md:text-3xl">
 						{manga.title}
@@ -204,62 +202,164 @@
 				</section>
 			{/if}
 
-			<!-- Chapters -->
-			<div class="mt-8 flex items-center justify-between gap-3">
+			<!-- Chapters Control Header -->
+			<div class="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<h2 class="text-lg font-semibold text-white">
-					Chapter
+					Chapters
 					<span class="font-normal text-zinc-500">({chapters.length})</span>
 				</h2>
-				<div class="flex gap-2">
-					<button
-						type="button"
-						class="rounded-lg border px-3 py-1.5 text-xs sm:text-sm {sortNewest
-							? 'border-fuchsia-400/40 bg-fuchsia-500/20 text-fuchsia-200'
-							: 'border-amber-400/40 bg-amber-500/20 text-amber-200'}"
-						onclick={() => (sortNewest = !sortNewest)}
-					>
-						{sortNewest ? 'Terbaru' : 'Terlama'}
-					</button>
-					<button
-						type="button"
-						class="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-zinc-300 sm:text-sm"
-						onclick={() => (viewMode = viewMode === 'list' ? 'grid' : 'list')}
-					>
-						{viewMode === 'list' ? 'Grid' : 'List'}
-					</button>
+
+				<div class="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+					<!-- Server Selection Buttons -->
+					<div class="flex items-center gap-1.5">
+						<button
+							type="button"
+							title="Server 1 — Mikodrive"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {activeServer === 'sv1' ? 'border-blue-500 bg-blue-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (activeServer = 'sv1')}
+						>
+							<div class="flex items-center gap-0.5">
+								<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+								<span class="text-[10px] font-bold">1</span>
+							</div>
+						</button>
+
+						<button
+							type="button"
+							title="Server 2 — Yomidays"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {activeServer === 'sv2' ? 'border-amber-500 bg-amber-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (activeServer = 'sv2')}
+						>
+							<div class="flex items-center gap-0.5">
+								<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+								<span class="text-[10px] font-bold">2</span>
+							</div>
+						</button>
+
+						<button
+							type="button"
+							title="Emergency Server — Firestore"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {activeServer === 'es' ? 'border-red-500 bg-red-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (activeServer = 'es')}
+						>
+							<div class="flex items-center gap-0.5">
+								<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+								<span class="text-[9px] font-bold">ES</span>
+							</div>
+						</button>
+					</div>
+
+					<!-- Sort & View Controls -->
+					<div class="flex items-center gap-1.5">
+						<!-- Sort Button -->
+						<button
+							type="button"
+							title="Urutkan Chapter"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+							onclick={() => (sortNewest = !sortNewest)}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform {sortNewest ? '' : 'rotate-180'}"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/></svg>
+						</button>
+
+						<!-- Text Grid View Button -->
+						<button
+							type="button"
+							title="Text Grid View"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'text' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (viewMode = 'text')}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
+						</button>
+
+						<!-- Thumbnail Grid View Button -->
+						<button
+							type="button"
+							title="Thumbnail Grid View"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'grid' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (viewMode = 'grid')}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+						</button>
+
+						<!-- List View Button -->
+						<button
+							type="button"
+							title="List View"
+							class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'list' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+							onclick={() => (viewMode = 'list')}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+						</button>
+					</div>
 				</div>
 			</div>
 
+			<!-- Chapter List Container -->
 			{#if chapters.length}
-				{#if viewMode === 'list'}
-					<div class="mt-3 space-y-2">
+				{#if viewMode === 'grid'}
+					<!-- 1. Thumbnail Grid Mode -->
+					<div class="mt-4 grid grid-cols-4 gap-2.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7">
 						{#each chapters as chapter}
 							<a
-								href="/read/{source}{chapter.id}"
-								class="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3.5 transition hover:bg-white/5"
+								href="/read/{source}{chapter.id}?server={activeServer}"
+								class="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/40 transition hover:-translate-y-0.5 hover:border-white/30"
 							>
-								<span class="text-sm text-zinc-100 sm:text-[15px]">{chapter.title}</span>
-								<div class="flex items-center gap-3">
+								{#if chapter.cover || manga.cover}
+									<img
+										src={proxyImage(chapter.cover || manga.cover)}
+										alt={chapter.title}
+										class="h-full w-full object-cover transition group-hover:scale-105"
+									/>
+								{/if}
+								<div class="absolute inset-x-0 bottom-0 bg-black/85 p-1.5 text-center backdrop-blur-sm">
+									<div class="truncate text-[10px] font-bold text-white sm:text-xs">
+										{chapter.title}
+									</div>
 									{#if chapter.date}
-										<span class="text-xs text-zinc-500">{chapter.date}</span>
+										<div class="text-[8px] opacity-75 text-zinc-300">{chapter.date}</div>
 									{/if}
-									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-zinc-500"><path d="m9 18 6-6-6-6"/></svg>
 								</div>
 							</a>
 						{/each}
 					</div>
-				{:else}
-					<div class="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+
+				{:else if viewMode === 'text'}
+					<!-- 2. Text Grid Mode -->
+					<div class="mt-4 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
 						{#each chapters as chapter}
 							<a
-								href="/read/{source}{chapter.id}"
-								class="overflow-hidden rounded-xl border border-white/10 bg-black/30 text-center transition hover:border-white/25"
+								href="/read/{source}{chapter.id}?server={activeServer}"
+								class="flex min-h-[52px] items-center justify-center rounded-xl border border-white/10 bg-black/30 p-2 text-center transition hover:border-white/30 hover:bg-white/5"
 							>
-								<div class="flex aspect-square items-center justify-center p-2">
-									<span class="line-clamp-3 px-1 text-xs font-semibold text-zinc-200">
+								<div>
+									<div class="line-clamp-1 text-xs font-semibold text-zinc-100 sm:text-sm">
 										{chapter.title}
-									</span>
+									</div>
+									{#if chapter.date}
+										<div class="mt-0.5 text-[9px] text-zinc-400">{chapter.date}</div>
+									{/if}
 								</div>
+							</a>
+						{/each}
+					</div>
+
+				{:else}
+					<!-- 3. List Mode -->
+					<div class="mt-4 space-y-2">
+						{#each chapters as chapter}
+							<a
+								href="/read/{source}{chapter.id}?server={activeServer}"
+								class="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3 transition hover:border-white/25 hover:bg-white/5"
+							>
+								<div class="min-w-0 pr-3">
+									<p class="truncate text-sm font-medium text-zinc-100 sm:text-[15px]">
+										{chapter.title}
+									</p>
+									{#if chapter.date}
+										<p class="mt-0.5 text-xs text-zinc-500">{chapter.date}</p>
+									{/if}
+								</div>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-500"><path d="m9 18 6-6-6-6"/></svg>
 							</a>
 						{/each}
 					</div>
