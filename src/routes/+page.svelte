@@ -1,31 +1,34 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { Search, ChevronLeft, ChevronRight, Loader2, Github, Star } from 'lucide-svelte';
 	import { getImpl, setImpl } from '$lib/stores/impl';
+
 	const { data }: { data: PageData } = $props();
 	let { mangas, sources, currentSource, currentPage, searchQuery } = $derived(data);
 
-	let searchInput = $derived(searchQuery || '');
-
+	let searchInput = $state(searchQuery || '');
 	let loading = $state(false);
 
-	// Check for stored impl on mount and redirect if on root
+	// Sync search box saat data server berubah
+	$effect(() => {
+		searchInput = searchQuery || '';
+	});
+
 	onMount(() => {
 		const urlParams = new URLSearchParams($page.url.search);
 		const hasSourceParam = urlParams.has('source');
-		
+
 		if (!hasSourceParam) {
 			const storedImpl = getImpl();
 			if (storedImpl && storedImpl !== currentSource) {
-				goto(`/?source=${storedImpl}`);
+				goto(`/?source=${storedImpl}`, { invalidateAll: true });
 				return;
 			}
 		}
-		
-		// Save current source as impl if it's different
+
 		if (currentSource && currentSource !== getImpl()) {
 			setImpl(currentSource);
 		}
@@ -36,28 +39,52 @@
 		return `/api/proxy?url=${encodeURIComponent(url)}&source=${currentSource}`;
 	}
 
+	async function navigate(params: URLSearchParams) {
+		loading = true;
+		try {
+			await goto(`/?${params.toString()}`, {
+				invalidateAll: true, // paksa re-run load
+				keepFocus: true,
+				noScroll: false
+			});
+		} finally {
+			loading = false;
+		}
+	}
+
 	function handleSearch(e: SubmitEvent) {
 		e.preventDefault();
-		loading = true;
 		const params = new URLSearchParams();
 		params.set('source', currentSource);
-		if (searchInput) params.set('q', searchInput);
-		goto(`/?${params.toString()}`).finally(() => (loading = false));
+		if (searchInput.trim()) params.set('q', searchInput.trim());
+		navigate(params);
 	}
 
-	function handleSourceChange(e: Event) {
+	async function handleSourceChange(e: Event) {
 		const select = e.target as HTMLSelectElement;
+		const next = select.value;
+		setImpl(next);
+
 		loading = true;
-		// Save the new source as the current impl
-		setImpl(select.value);
-		goto(`/?source=${select.value}`).finally(() => (loading = false));
+		try {
+			// Invalidate dependency browse:{source} + full load
+			await invalidate(`browse:${next}`);
+			await goto(`/?source=${next}`, {
+				invalidateAll: true,
+				keepFocus: true
+			});
+		} finally {
+			loading = false;
+		}
 	}
 
-	function goToPage(page: number) {
+	function goToPage(p: number) {
+		if (p < 1) return;
 		const params = new URLSearchParams();
 		params.set('source', currentSource);
-		params.set('page', String(page));
-		goto(`/?${params.toString()}`);
+		params.set('page', String(p));
+		if (searchQuery) params.set('q', searchQuery);
+		navigate(params);
 	}
 </script>
 
