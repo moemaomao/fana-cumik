@@ -171,17 +171,21 @@ export class WelomaSource extends BaseSource {
 		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
-		const title =
+		// FIX TITLE: Cek elemen spesifik Weloma seperti .series-name, meta og:title, atau h3
+		let title =
+			$('.series-name a').first().text().trim() ||
+			$('.series-name').first().text().trim() ||
 			$('h1').first().text().trim() ||
-			$('.series-title, .manga-title').first().text().trim() ||
-			$('title')
-				.text()
-				.replace(/\s*[-|]\s*Weloma.*$/i, '')
-				.trim() ||
-			path;
+			$('h3.series-title').first().text().trim() ||
+			$('meta[property="og:title"]').attr('content') ||
+			'';
+
+		// Bersihkan suffix title bawaan web
+		title = title.replace(/\s*[-|]\s*Weloma.*$/i, '').trim();
+		if (!title) title = path;
 
 		let cover =
-			$('.info-cover img.thumbnail, .info-cover img, img.thumbnail').first().attr('src') ||
+			$('.info-cover img.thumbnail, .info-cover img, .series-cover img').first().attr('src') ||
 			$('meta[property="og:image"]').attr('content') ||
 			'';
 		cover = this.absUrl(cover);
@@ -194,18 +198,17 @@ export class WelomaSource extends BaseSource {
 				.trim() || '';
 
 		const statusRaw = $('a[href*="manga-on-going"], a[href*="status"]').text().toLowerCase();
-		const status =
-			/complete|end|finish/.test(statusRaw) ? 'Completed' : 'Ongoing';
+		const status = /complete|end|finish/.test(statusRaw) ? 'Completed' : 'Ongoing';
 
 		const authors: string[] = [];
-		$('.author a, .series-info .author, a[href*="/author/"]').each((_, el) => {
+		$('.author a, .series-info .author a, a[href*="/author/"]').each((_, el) => {
 			const t = $(el).text().trim();
 			if (t && !authors.includes(t)) authors.push(t);
 		});
 
-		// FIX GENRE: Mengambil spesifik dari kontainer genre agar tidak mengambil semua tag/kategori lain
+		// FIX GENRE: Mengambil dari class tag & genre khusus Weloma
 		const genres: string[] = [];
-		$('.series-genres a, .genres-content a, .manga-info .genre a').each((_, el) => {
+		$('.series-gerne a, .tag-item, .series-genres a, .genres-content a').each((_, el) => {
 			const t = $(el).text().trim();
 			if (t && !genres.includes(t)) genres.push(t);
 		});
@@ -213,7 +216,11 @@ export class WelomaSource extends BaseSource {
 		const chapters: Chapter[] = [];
 		const seen = new Set<string>();
 
-		$('.list-chapters a[href*="/c/"], .chapters-list a[href*="/c/"], a[href*="/c/"]').each((i, el) => {
+		// FIX CHAPTER: Isoler pencarian HANYA di dalam container chapter list utama, bukan seluruh halaman
+		const $chapterList = $('.list-chapters, #list-chapters, .chapters-list, .chapter-list').first();
+		const $chapterLinks = $chapterList.length ? $chapterList.find('a[href*="/c/"]') : $('.list-chapters a[href*="/c/"]');
+
+		$chapterLinks.each((i, el) => {
 			const $a = $(el);
 			const href = $a.attr('href') || '';
 			if (!href) return;
@@ -228,7 +235,6 @@ export class WelomaSource extends BaseSource {
 				$a.text().replace(/\s+/g, ' ').trim() ||
 				`Chapter ${i + 1}`;
 
-			// FIX NUMBER: Ekstraksi angka chapter lebih akurat (mendukung "Ch. 185", "Chapter 175.5", "185")
 			const numMatch = chapterTitle.match(/(?:chap(?:ter)?|ch\.?|\b)\s*(\d+(?:\.\d+)?)/i);
 			const number = numMatch && numMatch[1] ? parseFloat(numMatch[1]) : i + 1;
 
