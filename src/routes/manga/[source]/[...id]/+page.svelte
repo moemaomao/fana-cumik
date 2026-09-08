@@ -15,7 +15,6 @@
 		)
 	);
 
-	/** Parse baris "Key: value" dari description Hitomi / source lain */
 	function parseMeta(desc: string | undefined) {
 		const out: Record<string, string> = {};
 		if (!desc) return out;
@@ -32,12 +31,12 @@
 	let artists = $derived(meta['artists'] || manga.authors?.join(', ') || '');
 	let groups = $derived(meta['groups'] || '');
 	let pages = $derived(meta['pages'] || '');
+	let author = $derived(meta['author'] || meta['authors'] || '');
 
-	/** Sinopsis tanpa baris meta Type/Language/... */
 	let synopsis = $derived(
 		(manga.description || '')
 			.split(/\n+/)
-			.filter((line) => !/^\s*(type|language|artists|groups|pages)\s*:/i.test(line))
+			.filter((line) => !/^\s*(type|language|artists?|groups?|pages)\s*:/i.test(line))
 			.join('\n')
 			.trim()
 	);
@@ -61,26 +60,23 @@
 	<meta name="description" content={synopsis?.slice(0, 160) || manga.title} />
 </svelte:head>
 
-<!-- Container sempit ala Mikoroku (~480px) -->
-<div class="mx-auto w-full max-w-[480px] px-3 py-4">
-	<div
-		class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f1e] shadow-xl"
-	>
-		<!-- Blur bg -->
+<!-- Lebih lebar di desktop, tetap nyaman di mobile -->
+<div class="mx-auto w-full max-w-3xl px-4 py-6">
+	<div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f1e] shadow-xl">
 		{#if manga.cover}
 			<div
-				class="pointer-events-none absolute inset-0 scale-105 bg-cover bg-center opacity-50 blur-[4px]"
+				class="pointer-events-none absolute inset-0 scale-105 bg-cover bg-center opacity-40 blur-md"
 				style="background-image: url('{proxyImage(manga.cover)}')"
 			></div>
-			<div class="absolute inset-0 bg-[#0f0f1e]/70"></div>
+			<div class="absolute inset-0 bg-[#0f0f1e]/75"></div>
 		{/if}
 
-		<div class="relative z-10">
-			<!-- Main: cover + info -->
-			<div class="flex gap-3.5 px-3.5 pt-4">
+		<div class="relative z-10 p-4 sm:p-6">
+			<!-- Header -->
+			<div class="flex flex-col gap-5 sm:flex-row sm:gap-6">
 				<!-- Cover -->
-				<div class="w-[90px] shrink-0">
-					<div class="aspect-[90/130] overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
+				<div class="mx-auto w-[120px] shrink-0 sm:mx-0 sm:w-[140px]">
+					<div class="aspect-[2/3] overflow-hidden rounded-xl bg-zinc-900 shadow-lg">
 						{#if manga.cover}
 							<img
 								src={proxyImage(manga.cover)}
@@ -89,96 +85,110 @@
 							/>
 						{:else}
 							<div class="flex h-full items-center justify-center text-zinc-600">
-								<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+								<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
 							</div>
 						{/if}
 					</div>
 				</div>
 
-				<!-- Info kanan -->
-				<div class="min-w-0 flex-1 pt-0.5">
-					<h1 class="text-[14px] font-bold leading-snug text-white">
+				<!-- Info -->
+				<div class="min-w-0 flex-1">
+					<h1 class="text-lg font-bold leading-snug text-white sm:text-2xl">
 						{manga.title}
 					</h1>
 
-					<div class="mt-2 space-y-1 text-[11px] text-zinc-200">
-						{#if artists}
-							<div class="flex items-center gap-1.5">
-								<!-- user -->
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-								<span class="truncate">{artists}</span>
+					<!-- Detail rows: icon + label + value -->
+					<div class="mt-3 space-y-2 text-sm text-zinc-200">
+						{#if artists || author}
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+								<p>
+									<span class="text-zinc-500">Artist:</span>
+									<span class="ml-1 text-zinc-100">{artists || author}</span>
+								</p>
 							</div>
 						{/if}
 
 						{#if groups}
-							<div class="flex items-center gap-1.5">
-								<!-- users -->
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-								<span class="truncate">{groups}</span>
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+								<p>
+									<span class="text-zinc-500">Group:</span>
+									<span class="ml-1 text-zinc-100">{groups}</span>
+								</p>
 							</div>
 						{/if}
 
 						{#if type}
-							<div class="flex items-center gap-1.5">
-								<!-- book-type -->
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-								<span class="truncate capitalize">{type}</span>
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+								<p>
+									<span class="text-zinc-500">Type:</span>
+									<span class="ml-1 capitalize text-zinc-100">{type}</span>
+								</p>
 							</div>
 						{/if}
 
 						{#if language}
-							<div class="flex items-center gap-1.5">
-								<!-- globe -->
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-								<span class="truncate">{language}</span>
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+								<p>
+									<span class="text-zinc-500">Language:</span>
+									<span class="ml-1 text-zinc-100">{language}</span>
+								</p>
 							</div>
 						{/if}
 
-						<div class="flex items-center gap-1.5">
-							<!-- status clock -->
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-							<span class={statusClass(manga.status)}>{manga.status || 'Unknown'}</span>
+						<div class="flex items-start gap-2">
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+							<p>
+								<span class="text-zinc-500">Status:</span>
+								<span class="ml-1 {statusClass(manga.status)}">{manga.status || 'Unknown'}</span>
+							</p>
 						</div>
 
 						{#if pages}
-							<div class="flex items-center gap-1.5">
-								<!-- file / pages -->
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-								<span>{pages} pages</span>
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+								<p>
+									<span class="text-zinc-500">Pages:</span>
+									<span class="ml-1 text-zinc-100">{pages}</span>
+								</p>
 							</div>
-						{:else if manga.chapters?.length}
-							<div class="flex items-center gap-1.5">
-								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-zinc-400"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-								<span>{manga.chapters.length} chapter</span>
+						{/if}
+
+						{#if manga.chapters?.length}
+							<div class="flex items-start gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+								<p>
+									<span class="text-zinc-500">Chapters:</span>
+									<span class="ml-1 text-zinc-100">{manga.chapters.length}</span>
+								</p>
 							</div>
 						{/if}
 					</div>
 
-					<!-- Buttons -->
-					<div class="mt-3 flex flex-wrap gap-2">
+					<!-- Actions -->
+					<div class="mt-4 flex flex-wrap gap-2">
 						{#if lastRead}
 							<a
 								href="/read/{source}{lastRead.chapterId}"
-								class="inline-flex items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-[11px] font-semibold text-white"
+								class="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white"
 							>
-								<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
-								Lanjut
+								Baca lanjut
 							</a>
 						{:else if chapters.length}
 							<a
 								href="/read/{source}{chapters[chapters.length - 1].id}"
-								class="inline-flex items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-[11px] font-semibold text-white"
+								class="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white"
 							>
-								<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
 								Baca
 							</a>
 						{/if}
-
 						<button
 							type="button"
-							class="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] text-zinc-200"
+							class="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm text-zinc-200"
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
 							Bookmark
 						</button>
 					</div>
@@ -187,11 +197,10 @@
 
 			<!-- Genres -->
 			{#if manga.genres?.length}
-				<div class="mt-4 grid grid-cols-3 gap-2 px-3.5 sm:grid-cols-4">
+				<div class="mt-5 flex flex-wrap gap-2">
 					{#each manga.genres as genre}
 						<span
-							class="truncate rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 text-center text-[10px] text-zinc-200"
-							title={genre}
+							class="rounded-lg border border-white/10 bg-black/35 px-3 py-1.5 text-xs text-zinc-200"
 						>
 							{genre}
 						</span>
@@ -199,24 +208,24 @@
 				</div>
 			{/if}
 
-			<!-- Sinopsis (tanpa meta yang sudah di samping cover) -->
+			<!-- Sinopsis -->
 			{#if synopsis}
-				<section class="mx-3.5 mt-4 rounded-xl border border-white/10 bg-black/25 p-3.5">
-					<h2 class="mb-2 text-sm font-semibold text-white">Sinopsis</h2>
-					<p class="text-[12px] leading-relaxed text-zinc-300 whitespace-pre-line">{synopsis}</p>
+				<section class="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">
+					<h2 class="mb-2 text-base font-semibold text-white">Sinopsis</h2>
+					<p class="text-sm leading-relaxed text-zinc-300 whitespace-pre-line">{synopsis}</p>
 				</section>
 			{/if}
 
-			<!-- Chapter tools -->
-			<div class="mt-5 flex items-center justify-between gap-2 px-3.5">
-				<h2 class="text-sm font-semibold text-white">
+			<!-- Chapter header -->
+			<div class="mt-6 flex items-center justify-between gap-2">
+				<h2 class="text-base font-semibold text-white">
 					Chapter
 					<span class="font-normal text-zinc-500">({chapters.length})</span>
 				</h2>
-				<div class="flex gap-1.5">
+				<div class="flex gap-2">
 					<button
 						type="button"
-						class="rounded-lg border px-2.5 py-1 text-[10px] {sortNewest
+						class="rounded-lg border px-3 py-1.5 text-xs {sortNewest
 							? 'border-fuchsia-400/40 bg-fuchsia-500/20 text-fuchsia-200'
 							: 'border-amber-400/40 bg-amber-500/20 text-amber-200'}"
 						onclick={() => (sortNewest = !sortNewest)}
@@ -225,7 +234,7 @@
 					</button>
 					<button
 						type="button"
-						class="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] text-zinc-300"
+						class="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-zinc-300"
 						onclick={() => (viewMode = viewMode === 'list' ? 'grid' : 'list')}
 					>
 						{viewMode === 'list' ? 'Grid' : 'List'}
@@ -233,34 +242,34 @@
 				</div>
 			</div>
 
-			<!-- Chapter list -->
+			<!-- Chapters -->
 			{#if chapters.length}
 				{#if viewMode === 'list'}
-					<div class="space-y-1.5 px-3.5 pb-5 pt-3">
+					<div class="mt-3 space-y-1.5 pb-2">
 						{#each chapters as chapter}
 							<a
 								href="/read/{source}{chapter.id}"
-								class="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-3.5 py-3 transition hover:bg-white/5"
+								class="flex items-center justify-between rounded-xl border border-white/10 bg-black/25 px-4 py-3 transition hover:bg-white/5"
 							>
-								<span class="text-[13px] text-zinc-200">{chapter.title}</span>
+								<span class="text-sm text-zinc-200">{chapter.title}</span>
 								<div class="flex items-center gap-2">
 									{#if chapter.date}
-										<span class="text-[10px] text-zinc-500">{chapter.date}</span>
+										<span class="text-xs text-zinc-500">{chapter.date}</span>
 									{/if}
-									<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-zinc-500"><path d="m9 18 6-6-6-6"/></svg>
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-zinc-500"><path d="m9 18 6-6-6-6"/></svg>
 								</div>
 							</a>
 						{/each}
 					</div>
 				{:else}
-					<div class="grid grid-cols-3 gap-2 px-3.5 pb-5 pt-3">
+					<div class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 pb-2">
 						{#each chapters as chapter}
 							<a
 								href="/read/{source}{chapter.id}"
 								class="overflow-hidden rounded-xl border border-white/10 bg-black/30 text-center"
 							>
 								<div class="flex aspect-square items-center justify-center p-2">
-									<span class="line-clamp-3 px-1 text-[11px] font-semibold text-zinc-200">
+									<span class="line-clamp-3 px-1 text-xs font-semibold text-zinc-200">
 										{chapter.title}
 									</span>
 								</div>
@@ -269,7 +278,7 @@
 					</div>
 				{/if}
 			{:else}
-				<p class="px-3.5 py-8 text-center text-sm text-zinc-500">Belum ada chapter.</p>
+				<p class="py-8 text-center text-sm text-zinc-500">Belum ada chapter.</p>
 			{/if}
 		</div>
 	</div>
