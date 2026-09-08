@@ -5,7 +5,8 @@
 	let { manga, source } = $derived(data);
 
 	let sortNewest = $state(true);
-	let viewMode = $state<'grid' | 'text' | 'list'>('grid');
+	// 4 Mode: 'grid-thumb' | 'grid-text' | 'list-thumb' | 'list-text'
+	let viewMode = $state<'grid-thumb' | 'grid-text' | 'list-thumb' | 'list-text'>('grid-thumb');
 	let activeServer = $state<'sv1' | 'sv2' | 'es'>('sv1');
 
 	let chapters = $derived(
@@ -72,7 +73,6 @@
 		<div class="relative z-10 p-5 sm:p-8">
 			<!-- Header Info Manga -->
 			<div class="flex flex-col gap-6 md:flex-row md:gap-8">
-				<!-- Cover & Actions -->
 				<div class="mx-auto flex w-[150px] shrink-0 flex-col items-center gap-3 sm:w-[170px] md:mx-0 md:w-[190px]">
 					<div class="aspect-[2/3] w-full overflow-hidden rounded-xl bg-zinc-900 shadow-xl ring-1 ring-white/10">
 						{#if manga.cover}
@@ -106,7 +106,6 @@
 					</button>
 				</div>
 
-				<!-- Info Metadata -->
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold leading-snug text-white sm:text-2xl md:text-3xl">
 						{manga.title}
@@ -129,7 +128,7 @@
 
 						{#if groups}
 							<div class="flex items-start gap-2.5">
-								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0 text-zinc-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 1 0 7.75"/></svg>
 								<p><span class="text-zinc-500">Group:</span> <span class="text-zinc-100">{groups}</span></p>
 							</div>
 						{/if}
@@ -178,7 +177,6 @@
 				</div>
 			</div>
 
-			<!-- Genres -->
 			{#if manga.genres?.length}
 				<div class="mt-6 flex flex-wrap gap-2">
 					{#each manga.genres as genre}
@@ -191,7 +189,6 @@
 				</div>
 			{/if}
 
-			<!-- Synopsis -->
 			{#if synopsis}
 				<section class="mt-6 rounded-xl border border-white/10 bg-black/30 p-5">
 					<h2 class="mb-3 text-lg font-semibold text-white">Synopsis</h2>
@@ -212,7 +209,7 @@
 						onclick={() => (activeServer = 'sv1')}
 					>
 						<div class="flex items-center gap-0.5">
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
 							<span class="text-[10px] font-bold">1</span>
 						</div>
 					</button>
@@ -224,7 +221,7 @@
 						onclick={() => (activeServer = 'sv2')}
 					>
 						<div class="flex items-center gap-0.5">
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
 							<span class="text-[10px] font-bold">2</span>
 						</div>
 					</button>
@@ -236,13 +233,13 @@
 						onclick={() => (activeServer = 'es')}
 					>
 						<div class="flex items-center gap-0.5">
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
 							<span class="text-[9px] font-bold">ES</span>
 						</div>
 					</button>
 				</div>
 
-				<!-- Section Chapters (Tengah dengan garis divider) -->
+				<!-- Section Chapters (Tengah) -->
 				<div class="flex flex-1 items-center gap-3">
 					<div class="h-[1px] flex-1 bg-white/10"></div>
 					<h2 class="text-sm font-semibold tracking-wide text-zinc-200 sm:text-base">
@@ -263,54 +260,91 @@
 						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform {sortNewest ? '' : 'rotate-180'}"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/></svg>
 					</button>
 
-					<!-- Thumbnail Grid View Button -->
+					<!-- 1. Grid dengan Thumbnail -->
 					<button
 						type="button"
-						title="Thumbnail Grid View"
-						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'grid' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
-						onclick={() => (viewMode = 'grid')}
+						title="Grid dengan Thumbnail"
+						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'grid-thumb' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+						onclick={() => (viewMode = 'grid-thumb')}
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 14l4-4 4 4"/><path d="M14 11l3-3 4 4"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+					</button>
+
+					<!-- 2. Grid Tanpa Thumbnail (Mirip Screenshot) -->
+					<button
+						type="button"
+						title="Grid Tanpa Thumbnail"
+						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'grid-text' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+						onclick={() => (viewMode = 'grid-text')}
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
 					</button>
 
-					<!-- Text Grid View Button -->
+					<!-- 3. List dengan Thumbnail -->
 					<button
 						type="button"
-						title="Text Grid View"
-						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'text' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
-						onclick={() => (viewMode = 'text')}
+						title="List dengan Thumbnail"
+						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'list-thumb' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+						onclick={() => (viewMode = 'list-thumb')}
 					>
-						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="6" height="6" x="3" y="4" rx="1"/><rect width="6" height="6" x="3" y="14" rx="1"/><line x1="12" x2="21" y1="7" y2="7"/><line x1="12" x2="21" y1="17" y2="17"/></svg>
 					</button>
 
-					<!-- List View Button -->
+					<!-- 4. List Tanpa Thumbnail (Compact) -->
 					<button
 						type="button"
-						title="List View"
-						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'list' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
-						onclick={() => (viewMode = 'list')}
+						title="List Tanpa Thumbnail"
+						class="flex h-9 w-9 items-center justify-center rounded-xl border transition {viewMode === 'list-text' ? 'border-purple-500 bg-purple-600 text-white' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'}"
+						onclick={() => (viewMode = 'list-text')}
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
 					</button>
 				</div>
 			</div>
 
-			<!-- Chapter List Container (Mirip SS) -->
+			<!-- Chapter Lists View -->
 			{#if chapters.length}
-				{#if viewMode === 'grid'}
-					<!-- 1. Grid Style Mirip SS (Box dengan Tanggal di Bawah Judul) -->
+				{#if viewMode === 'grid-thumb'}
+					<!-- MODE 1: Grid dengan Thumbnail -->
+					<div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+						{#each chapters as chapter}
+							<a
+								href="/read/{source}{chapter.id}?server={activeServer}"
+								class="group flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#16162a]/80 transition hover:border-purple-500/50 hover:bg-[#1a1a32]"
+							>
+								<div class="aspect-[16/9] w-full overflow-hidden bg-zinc-900">
+									{#if chapter.cover || manga.cover}
+										<img
+											src={proxyImage(chapter.cover || manga.cover)}
+											alt={chapter.title}
+											class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+										/>
+									{/if}
+								</div>
+								<div class="flex flex-1 flex-col justify-between p-2.5">
+									<div class="truncate text-xs font-bold text-white group-hover:text-purple-400">
+										{chapter.title}
+									</div>
+									<div class="mt-1.5 flex items-center justify-between text-[10px] text-zinc-400">
+										<span>{chapter.date || '20/01/2025'}</span>
+										<span class="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-400">Exn</span>
+									</div>
+								</div>
+							</a>
+						{/each}
+					</div>
+
+				{:else if viewMode === 'grid-text'}
+					<!-- MODE 2: Grid Tanpa Thumbnail (Sesuai SS) -->
 					<div class="mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
 						{#each chapters as chapter}
 							<a
 								href="/read/{source}{chapter.id}?server={activeServer}"
-								class="group flex flex-col justify-between rounded-lg border border-white/10 bg-[#16162a]/80 p-3 transition hover:border-white/20 hover:bg-[#1a1a32]"
+								class="group flex flex-col justify-between rounded-lg border border-white/10 bg-[#16162a]/80 p-3 transition hover:border-purple-500/50 hover:bg-[#1a1a32]"
 							>
-								<!-- Judul Chapter -->
 								<div class="truncate text-xs font-bold text-white group-hover:text-purple-400">
 									{chapter.title}
 								</div>
-
-								<!-- Tanggal & Meta Tag -->
 								<div class="mt-2 flex items-center justify-between text-[10px] text-zinc-400">
 									<span>{chapter.date || '20/01/2025'}</span>
 									<span class="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-zinc-400">Exn</span>
@@ -319,28 +353,45 @@
 						{/each}
 					</div>
 
-				{:else if viewMode === 'text'}
-					<!-- 2. Text Grid Mode -->
-					<div class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+				{:else if viewMode === 'list-thumb'}
+					<!-- MODE 3: List dengan Thumbnail -->
+					<div class="mt-6 space-y-2.5">
 						{#each chapters as chapter}
 							<a
 								href="/read/{source}{chapter.id}?server={activeServer}"
-								class="flex min-h-[44px] items-center justify-center rounded-lg border border-white/10 bg-[#16162a]/80 p-2 text-center transition hover:border-white/20 hover:bg-[#1a1a32]"
+								class="group flex items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-[#16162a]/80 p-2 transition hover:border-purple-500/50 hover:bg-[#1a1a32]"
 							>
-								<div class="truncate text-xs font-semibold text-zinc-200">
-									{chapter.title}
+								<div class="aspect-[16/10] w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-900 sm:w-28">
+									{#if chapter.cover || manga.cover}
+										<img
+											src={proxyImage(chapter.cover || manga.cover)}
+											alt={chapter.title}
+											class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+										/>
+									{/if}
+								</div>
+								<div class="flex flex-1 items-center justify-between min-w-0 pr-2">
+									<div>
+										<p class="truncate text-xs font-bold text-white sm:text-sm group-hover:text-purple-400">
+											{chapter.title}
+										</p>
+										<p class="mt-1 text-[10px] text-zinc-400 sm:text-xs">
+											{chapter.date || '20/01/2025'}
+										</p>
+									</div>
+									<span class="rounded bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">Exn</span>
 								</div>
 							</a>
 						{/each}
 					</div>
 
 				{:else}
-					<!-- 3. List Mode -->
+					<!-- MODE 4: List Tanpa Thumbnail (Compact List) -->
 					<div class="mt-6 space-y-2">
 						{#each chapters as chapter}
 							<a
 								href="/read/{source}{chapter.id}?server={activeServer}"
-								class="flex items-center justify-between rounded-lg border border-white/10 bg-[#16162a]/80 px-4 py-3 transition hover:border-white/20 hover:bg-[#1a1a32]"
+								class="flex items-center justify-between rounded-lg border border-white/10 bg-[#16162a]/80 px-4 py-3 transition hover:border-purple-500/50 hover:bg-[#1a1a32]"
 							>
 								<div class="min-w-0 pr-3">
 									<p class="truncate text-sm font-semibold text-zinc-100">
