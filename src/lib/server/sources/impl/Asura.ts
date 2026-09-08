@@ -10,7 +10,7 @@ import * as cheerio from 'cheerio';
 export class AsuraSource extends BaseSource {
 	id = 'asura';
 	name = 'Asura Scans';
-	baseUrl = 'https://asuracomic.net';
+	baseUrl = 'https://asurascans.com/';
 
 	async getLatestManga(_page: number): Promise<Manga[]> {
 		const res: Manga[] = [];
