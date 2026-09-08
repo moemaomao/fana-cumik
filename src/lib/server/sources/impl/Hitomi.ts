@@ -268,51 +268,50 @@ export class HitomiSource extends BaseSource {
 	}
 
 	// ── Details ──────────────────────────────────────────────────────────────
+async getMangaDetails(mangaId: string): Promise<MangaDetails> {
+	const gid = this.extractGid(mangaId);
+	if (!gid) throw new Error(`Invalid Hitomi id: ${mangaId}`);
 
-	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-		const gid = this.extractGid(mangaId);
-		if (!gid) throw new Error(`Invalid Hitomi id: ${mangaId}`);
+	const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
+	const info = this.parseGalleryInfo(js);
+	await this.ensureGg().catch(() => undefined);
 
-		const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
-		const info = this.parseGalleryInfo(js);
-		await this.ensureGg().catch(() => undefined);
+	const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
+	const hash = info.files?.[0]?.hash || '';
+	const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
+	const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
+	const tags = (info.tags || []).map((t: any) => t.tag).filter(Boolean);
+	const id = this.toId(gid);
 
-		const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
-		const hash = info.files?.[0]?.hash || '';
-		const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
-		const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
-		const tags = (info.tags || []).map((t: any) => t.tag).filter(Boolean);
-		const id = this.toId(gid);
-
-		return {
-			id,
-			sourceId: this.id,
-			title,
-			cover: hash ? this.thumbFromHash(hash) : '',
-			description: [
-				info.type && `Type: ${info.type}`,
-				(info.language_localname || info.language) &&
-					`Language: ${info.language_localname || info.language}`,
-				artists.length && `Artists: ${artists.join(', ')}`,
-				groups.length && `Groups: ${groups.join(', ')}`,
-				info.files && `Pages: ${info.files.length}`
-			]
-				.filter(Boolean)
-				.join('\n'),
-			authors: artists.length ? artists : groups,
-			genres: tags,
-			status: 'Completed',
-			chapters: [
-				{
-					id,
-					title: 'Read',
-					number: 1,
-					date: info.date || ''
-				}
-			]
-		};
-	}
-
+	return {
+		id,
+		sourceId: this.id,
+		title,
+		cover: hash ? this.thumbFromHash(hash) : '',
+		description: [
+			info.japanese_title && `AltTitle: ${info.japanese_title}`,
+			info.type && `Type: ${info.type}`,
+			(info.language_localname || info.language) &&
+				`Language: ${info.language_localname || info.language}`,
+			artists.length && `Artists: ${artists.join(', ')}`,
+			groups.length && `Groups: ${groups.join(', ')}`,
+			info.files && `Pages: ${info.files.length}`
+		]
+			.filter(Boolean)
+			.join('\n'),
+		authors: artists.length ? artists : groups,
+		genres: tags,
+		status: 'Completed',
+		chapters: [
+			{
+				id,
+				title: 'Read',
+				number: 1,
+				date: info.date || ''
+			}
+		]
+	};
+}
 	// ── Pages ────────────────────────────────────────────────────────────────
 
 	async getChapterPages(chapterId: string): Promise<string[]> {
