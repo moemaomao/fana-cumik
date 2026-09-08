@@ -7,13 +7,13 @@
  */
 
 import { AsuraSource } from './impl/Asura';
-import { ManhuafastSource } from './impl/Manhuafast';
+import { WelomaSource } from './impl/weloma';
 import type { IMangaSource } from './types';
 
 // Registry of all available manga sources
 const sources: Record<string, IMangaSource> = {
 	asura: new AsuraSource(),
-	manhuafast: new ManhuafastSource(),
+	weloma: new WelomaSource(),
 	// Add more sources here:
 	// mangabat: new MangabatSource(),
 	// komikcast: new KomikcastSource(),
@@ -26,7 +26,9 @@ const sources: Record<string, IMangaSource> = {
 export function getSource(sourceId: string): IMangaSource {
 	const source = sources[sourceId];
 	if (!source) {
-		throw new Error(`Source "${sourceId}" not found. Available sources: ${Object.keys(sources).join(', ')}`);
+		throw new Error(
+			`Source "${sourceId}" not found. Available sources: ${Object.keys(sources).join(', ')}`
+		);
 	}
 	return source;
 }
