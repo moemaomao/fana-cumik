@@ -3,14 +3,14 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * Hitomi.la adapter (full refactor)
+ * Hitomi.la adapter
  *
- * - Index   : binary .nozomi @ ltn.gold-usergeneratedcontent.net
- * - List    : galleryblock/{id}.html (fallback galleries/{id}.js)
- * - Detail  : galleries/{id}.js → galleryinfo
- * - Pages   : hash + gg.js → CDN gold-usergeneratedcontent.net
+ * - Index  : binary .nozomi @ ltn.gold-usergeneratedcontent.net
+ * - List   : galleryblock/{id}.html (fallback galleries/{id}.js)
+ * - Detail : galleries/{id}.js → galleryinfo
+ * - Pages  : hash + gg.js → CDN gold-usergeneratedcontent.net
  *
- * ID format: "/{numericId}"  (leading slash wajib biar route /manga/hitomi/{id} cocok)
+ * ID format: "/{numericId}" (leading slash wajib untuk route app)
  */
 export class HitomiSource extends BaseSource {
 	id = 'hitomi';
@@ -25,7 +25,7 @@ export class HitomiSource extends BaseSource {
 	private ggO = 0;
 	private ggLoadedAt = 0;
 
-	// ── HTTP helpers ─────────────────────────────────────────────────────────
+	// ── HTTP ─────────────────────────────────────────────────────────────────
 
 	private h(): Record<string, string> {
 		return {
@@ -92,10 +92,26 @@ export class HitomiSource extends BaseSource {
 		return `https://${sub}.${this.cdn}/${this.ggB}${s}/${hash}.${ext}`;
 	}
 
+	/**
+	 * Thumbnail path:
+	 *   hash ...cff55 → webpbigtn/5/f5/{hash}.webp
+	 *   a = last char, b = 2 chars before last
+	 */
 	private thumbFromHash(hash: string): string {
-		const a = hash.slice(-1);
-		const b = hash.slice(-3);
+		if (!hash) return '';
+		const a = hash.slice(-1); // '5'
+		const b = hash.slice(-3, -1); // 'f5'  ← penting: bukan slice(-3)
 		return `https://tn.${this.cdn}/webpbigtn/${a}/${b}/${hash}.webp`;
+	}
+
+	private normalizeCover(url: string): string {
+		if (!url) return '';
+		let u = url.trim();
+		if (u.startsWith('//')) u = `https:${u}`;
+		u = u
+			.replace(/https?:\/\/tn\.hitomi\.la/gi, `https://tn.${this.cdn}`)
+			.replace(/\/\/tn\.hitomi\.la/gi, `//tn.${this.cdn}`);
+		return u;
 	}
 
 	// ── Gallery parsing ──────────────────────────────────────────────────────
@@ -117,41 +133,53 @@ export class HitomiSource extends BaseSource {
 		return String(mangaId).replace(/\D/g, '');
 	}
 
-	/** galleryblock HTML → Manga */
 	private parseBlock(html: string, gid: number): Manga | null {
 		const $ = cheerio.load(html);
-		const a = $('a.lillie, a[href*=".html"]').first();
-		const title =
-			$('h1 a').first().text().trim() ||
-			$('.lillie').first().text().trim() ||
-			a.text().trim() ||
-			`Gallery ${gid}`;
+
+		const title = (
+			$('h1 a').first().text() ||
+			$('a.lillie').first().text() ||
+			$('a[href*=".html"]').first().text() ||
+			`Gallery ${gid}`
+		)
+			.replace(/\s+/g, ' ')
+			.trim();
 
 		let cover =
 			$('img.lazyload').attr('data-src') ||
+			$('source[data-srcset]').attr('data-srcset')?.split(/[\s,]+/)[0] ||
 			$('img').attr('data-src') ||
 			$('img').attr('src') ||
 			'';
-		if (cover.startsWith('//')) cover = `https:${cover}`;
-		cover = cover.replace('tn.hitomi.la', `tn.${this.cdn}`);
+		cover = this.normalizeCover(cover);
 
-		const clean = title.replace(/\s+/g, ' ').trim();
-		if (!clean) return null;
+		if (!title) return null;
 
 		return {
 			id: this.toId(gid),
-			title: clean,
+			title,
 			cover,
 			sourceId: this.id
 		};
 	}
 
-	/** Load brief metadata for one gallery */
 	private async loadBrief(gid: number): Promise<Manga | null> {
 		try {
 			const block = await this.getText(`${this.ltn}/galleryblock/${gid}.html`);
 			const fromBlock = this.parseBlock(block, gid);
-			if (fromBlock) return fromBlock;
+			if (fromBlock?.cover) return fromBlock;
+			if (fromBlock) {
+				// block tanpa cover → coba hash dari .js
+				try {
+					const js = await this.getText(`${this.ltn}/galleries/${gid}.js`);
+					const info = this.parseGalleryInfo(js);
+					const hash = info.files?.[0]?.hash || '';
+					if (hash) fromBlock.cover = this.thumbFromHash(hash);
+				} catch {
+					/* keep title-only */
+				}
+				return fromBlock;
+			}
 		} catch {
 			/* fallback */
 		}
@@ -254,7 +282,6 @@ export class HitomiSource extends BaseSource {
 		const artists = (info.artists || []).map((a: any) => a.artist).filter(Boolean);
 		const groups = (info.groups || []).map((g: any) => g.group).filter(Boolean);
 		const tags = (info.tags || []).map((t: any) => t.tag).filter(Boolean);
-
 		const id = this.toId(gid);
 
 		return {
@@ -277,7 +304,7 @@ export class HitomiSource extends BaseSource {
 			status: 'Completed',
 			chapters: [
 				{
-					id, // sama dengan manga id → reader /read/hitomi/{id}
+					id,
 					title: 'Read',
 					number: 1,
 					date: info.date || ''
