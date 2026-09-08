@@ -1,11 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { getLastRead } from '$lib/stores/history';
 
 	const { data }: { data: PageData } = $props();
 	let { manga, source } = $derived(data);
 
-	let lastRead = $derived(getLastRead(manga.id));
 	let sortNewest = $state(true);
 	let viewMode = $state<'list' | 'grid'>('list');
 
@@ -74,9 +72,10 @@
 		<div class="relative z-10 p-5 sm:p-8">
 			<!-- Header: cover kiri + info kanan (lebar) -->
 			<div class="flex flex-col gap-6 md:flex-row md:gap-8">
-				<!-- Cover besar -->
-				<div class="mx-auto w-[150px] shrink-0 sm:w-[170px] md:mx-0 md:w-[190px]">
-					<div class="aspect-[2/3] overflow-hidden rounded-xl bg-zinc-900 shadow-xl ring-1 ring-white/10">
+				
+				<!-- Kolom Cover Kiri (Cover + Rating + Bookmark) -->
+				<div class="mx-auto flex w-[150px] shrink-0 flex-col items-center gap-3 sm:w-[170px] md:mx-0 md:w-[190px]">
+					<div class="aspect-[2/3] w-full overflow-hidden rounded-xl bg-zinc-900 shadow-xl ring-1 ring-white/10">
 						{#if manga.cover}
 							<img
 								src={proxyImage(manga.cover)}
@@ -89,9 +88,28 @@
 							</div>
 						{/if}
 					</div>
+
+					<!-- Rating Bintang -->
+					<div class="flex items-center gap-1.5 text-sm font-semibold text-yellow-400">
+						<div class="flex text-amber-400">
+							{#each Array(5) as _, i}
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+							{/each}
+						</div>
+						<span class="text-xs text-zinc-300">8.2</span>
+					</div>
+
+					<!-- Tombol Bookmark -->
+					<button
+						type="button"
+						class="flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 py-2.5 text-sm font-medium text-white transition hover:bg-white/20"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+						Bookmark
+					</button>
 				</div>
 
-				<!-- Info -->
+				<!-- Info Kanan -->
 				<div class="min-w-0 flex-1">
 					<h1 class="text-xl font-bold leading-snug text-white sm:text-2xl md:text-3xl">
 						{manga.title}
@@ -159,30 +177,6 @@
 								</p>
 							</div>
 						{/if}
-					</div>
-
-					<div class="mt-5 flex flex-wrap gap-3">
-						{#if lastRead}
-							<a
-								href="/read/{source}{lastRead.chapterId}"
-								class="inline-flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg"
-							>
-								Lanjut baca
-							</a>
-						{:else if chapters.length}
-							<a
-								href="/read/{source}{chapters[chapters.length - 1].id}"
-								class="inline-flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg"
-							>
-								Baca
-							</a>
-						{/if}
-						<button
-							type="button"
-							class="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-medium text-zinc-100"
-						>
-							Bookmark
-						</button>
 					</div>
 				</div>
 			</div>
