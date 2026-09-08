@@ -5,7 +5,7 @@ import type { Chapter, Manga, MangaDetails } from '../types';
 export class ManhuafastSource extends BaseSource {
 	id = 'manhuafast';
 	name = 'ManhuaFast';
-	baseUrl = 'https://manhuafast.com';
+	baseUrl = 'https://weloma.net';
 
 	async getLatestManga(page: number): Promise<Manga[]> {
 		const mangas: Manga[] = [];
