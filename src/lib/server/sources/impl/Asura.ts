@@ -3,77 +3,76 @@ import type { Manga, MangaDetails, Chapter } from '../types';
 import * as cheerio from 'cheerio';
 
 /**
- * AsuraComic Adapter
+ * AsuraComic Adapter (refactored for current asurascans.com)
  *
- * Real working adapter for asuracomic.net based on proven scraping logic.
+ * Site rebuilt (Project Asura Revival):
+ * - Domain: https://asurascans.com
+ * - Manga path: /comics/{slug}-{hash}
+ * - Chapter path: /comics/{slug}-{hash}/chapter/{n}
+ * - Catalog: /browse?page=N  |  Search: /browse?search=...
+ * - Pages: Astro island props JSON (primary) + img fallback
  */
 export class AsuraSource extends BaseSource {
 	id = 'asura';
 	name = 'Asura Scans';
-	baseUrl = 'https://asurascans.com/';
+	baseUrl = 'https://asurascans.com';
 
-	async getLatestManga(_page: number): Promise<Manga[]> {
-		const res: Manga[] = [];
-		const html = await this.fetchHtml(`/page/${_page}`);
-		const $ = cheerio.load(html);
+	// ── Helpers ──────────────────────────────────────────────────────────────
 
-		const elements = $('.grid.grid-rows-1.grid-cols-1.sm\\:grid-cols-2.bg-\\[\\#222222\\].p-3.pb-0');
-
-		$(elements)
-			.find('div.w-full.p-1.pt-1.pb-3')
-			.each((_, e) => {
-				const titleEl = $(e).find('span').has('a');
-				const image = $(e).find('img').attr('src') || '';
-				const link = titleEl.find('a').attr('href') || '';
-				const title = titleEl.text().split('Chapter')[0].trim();
-
-				if (title && link) {
-					// Strip /series/ prefix to keep app IDs clean
-					const cleanLink = link.replace(/\/series\//, '/').replace(/^\/?/, '/');
-					res.push({
-						id: cleanLink,
-						title,
-						cover: image,
-						sourceId: this.id
-					});
-				}
-			});
-
-		return res;
+	private absUrl(href: string): string {
+		if (!href) return '';
+		if (href.startsWith('http')) return href;
+		if (href.startsWith('//')) return `https:${href}`;
+		return `${this.baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
 	}
 
-	async searchManga(query: string): Promise<Manga[]> {
+	private cleanId(link: string): string {
+		// Keep path clean, e.g. /comics/the-indomitable-martial-king-53fc8424
+		let id = link.trim();
+		if (id.startsWith('http')) {
+			try {
+				id = new URL(id).pathname;
+			} catch {
+				/* ignore */
+			}
+		}
+		if (!id.startsWith('/')) id = `/${id}`;
+		return id.replace(/\/+$/, '');
+	}
+
+	private parseCards($: cheerio.CheerioAPI): Manga[] {
 		const res: Manga[] = [];
-		const encodedQuery = encodeURIComponent(query);
-		const html = await this.fetchHtml(`/series?page=1&name=${encodedQuery}`);
-		const $ = cheerio.load(html);
+		const seen = new Set<string>();
 
-		// Target the specific grid container using the classes from your snippet
-		const elements = $('div.grid.grid-cols-2.gap-3.p-4 > a');
+		$('div.series-card').each((_, card) => {
+			const $card = $(card);
+			const a = $card.find('a[href*="/comics/"]').first();
+			const href = a.attr('href') || '';
+			if (!href || href.includes('/chapter/')) return;
 
-		elements.each((_, el) => {
-			const item = $(el);
+			const id = this.cleanId(href);
+			if (seen.has(id)) return;
+			seen.add(id);
 
-			// Extract Image
-			const image = item.find('img').attr('src') || '';
+			// Title: prefer h3, fallback to link text cleaned of chapter/rating noise
+			let title = $card.find('h3').first().text().trim();
+			if (!title) {
+				title = a
+					.text()
+					.replace(/\s*Chapter\s*\d+.*$/i, '')
+					.replace(/\s*\d+\.\d+\s*$/, '')
+					.trim();
+			}
 
-			// Extract Title
-			// The title is in the first span with font-bold inside the text block
-			// <span class="block text-[13.3px] font-bold">Title</span>
-			const title = item.find('span.block.font-bold').first().text().trim();
+			const img = $card.find('img').first();
+			let cover = img.attr('src') || img.attr('data-src') || '';
+			cover = this.absUrl(cover);
 
-			// Extract Link
-			const link = item.attr('href') || '';
-
-			if (title && link) {
-				// Clean the link to get the ID
-				// Input: "series/emperor-of-solo-play-e4516cae" -> Output: "/emperor-of-solo-play-e4516cae"
-				const cleanLink = link.replace(/^series\//, '/').replace(/^\/?/, '/');
-
+			if (title && id) {
 				res.push({
-					id: cleanLink,
-					title: title,
-					cover: image,
+					id,
+					title,
+					cover,
 					sourceId: this.id
 				});
 			}
@@ -82,129 +81,242 @@ export class AsuraSource extends BaseSource {
 		return res;
 	}
 
-	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
-		// Asura specific: Ensure /series or /comic prefix
-		let normalizedId = mangaId;
-		if (!normalizedId.startsWith('/series') && !normalizedId.startsWith('/comic')) {
-			normalizedId = `/series${normalizedId.startsWith('/') ? normalizedId : '/' + normalizedId}`;
-		}
+	// ── Catalog ──────────────────────────────────────────────────────────────
 
-		const html = await this.fetchHtml(normalizedId);
+	async getLatestManga(page: number): Promise<Manga[]> {
+		const path = page <= 1 ? '/browse' : `/browse?page=${page}`;
+		const html = await this.fetchHtml(path);
+		const $ = cheerio.load(html);
+		return this.parseCards($);
+	}
+
+	async searchManga(query: string): Promise<Manga[]> {
+		const encoded = encodeURIComponent(query);
+		const html = await this.fetchHtml(`/browse?search=${encoded}`);
+		const $ = cheerio.load(html);
+		return this.parseCards($);
+	}
+
+	// ── Manga Details ────────────────────────────────────────────────────────
+
+	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
+		let path = mangaId;
+		if (!path.startsWith('/comics/') && !path.startsWith('/comics')) {
+			path = `/comics/${path.replace(/^\//, '')}`;
+		}
+		path = this.cleanId(path);
+
+		const html = await this.fetchHtml(path);
 		const $ = cheerio.load(html);
 
-		// Extract basic info
-		const title = $('h1, .text-xl.font-bold').first().text().trim();
-		const cover = $('img[alt*="poster"], .series-cover img').first().attr('src') || '';
-		const description = $('span.text-\\[\\#A2A2A2\\], p.text-sm, .summary, .description').first().text().trim();
+		const title =
+			$('h1').first().text().trim() ||
+			$('title')
+				.text()
+				.replace(/\s*\|?\s*Asura Scans.*$/i, '')
+				.trim();
 
-		// Extract chapters from scrollbar-thin container
-		const chapters: Chapter[] = [];
-		const chapterElements = $('.scrollbar-thin').find('div').has('h3');
+		let cover =
+			$('img[src*="asura-images/covers/"]').first().attr('src') ||
+			$('meta[property="og:image"]').attr('content') ||
+			'';
+		cover = this.absUrl(cover);
 
-		chapterElements.each((i, el) => {
-			const $el = $(el);
-			const chapterTitle =
-				$el.find('h3').first().text() + ' ' + $el.find('h3').last().text();
-			const link = $el.find('a').attr('href') || '';
+		const description =
+			$('.summary__content, .summary, .description, .synopsis, .about, .series-description')
+				.first()
+				.text()
+				.trim() ||
+			$('meta[name="description"]').attr('content')?.trim() ||
+			'';
 
-			// Extract chapter number from title
-			const numMatch = chapterTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i);
-			const number = numMatch ? parseFloat(numMatch[1]) : i + 1;
+		const status =
+			$('div.flex.gap-3.pt-4 span.capitalize').first().text().trim() || 'Ongoing';
 
-			if (link) {
-				let id = link.startsWith('/') ? link : `/${link}`;
-				// Strip /series/ prefix for clean app IDs
-				// Asura links are usually /series/slug/chapter-x
-				id = id.replace(/\/series\//, '/');
-				if (!id.startsWith('/')) id = '/' + id;
-
-				chapters.push({
-					id,
-					title: chapterTitle.trim() || `Chapter ${number}`,
-					number,
-					date: ''
-				});
-			}
+		const genres: string[] = [];
+		$('a[href*="genres="]').each((_, el) => {
+			const g = $(el).text().trim();
+			if (g) genres.push(g);
 		});
 
-		// Return ID without /series prefix
-		const cleanMangaId = mangaId.replace(/\/series\//, '/').replace(/\/series$/, '');
+		const authors: string[] = [];
+		$('a[href*="author="]').each((_, el) => {
+			const a = $(el).text().trim();
+			if (a) authors.push(a);
+		});
+
+		// Chapters
+		const chapters: Chapter[] = [];
+		const seen = new Set<string>();
+
+		$('a[href*="/chapter/"]').each((i, el) => {
+			const $a = $(el);
+			const href = $a.attr('href') || '';
+			if (!href) return;
+
+			const id = this.cleanId(href);
+			if (seen.has(id)) return;
+			seen.add(id);
+
+			let chapterTitle = $a.text().replace(/\s+/g, ' ').trim();
+			// Clean relative time / date suffixes
+			chapterTitle = chapterTitle
+				.replace(/\s+\d+\s+(hour|day|week|month|year)s?\s+ago\s*$/i, '')
+				.replace(/\s+last\s+(week|month|year)\s*$/i, '')
+				.replace(/\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,\s*\d{4}\s*$/i, '')
+				.replace(/\s+(yesterday|today)\s*$/i, '')
+				.trim();
+
+			const lower = chapterTitle.toLowerCase();
+			if (['last chapter', 'next chapter', 'previous chapter'].includes(lower)) return;
+			if (lower === 'first chapter') chapterTitle = 'Chapter 1';
+
+			const numMatch = id.match(/\/chapter\/(\d+(?:\.\d+)?)/) || chapterTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i);
+			const number = numMatch ? parseFloat(numMatch[1]) : i + 1;
+
+			chapters.push({
+				id,
+				title: chapterTitle || `Chapter ${number}`,
+				number,
+				date: ''
+			});
+		});
+
+		// Sort ascending by chapter number (site shows newest first)
+		chapters.sort((a, b) => a.number - b.number);
 
 		return {
-			id: cleanMangaId,
+			id: path,
 			sourceId: this.id,
 			title,
 			cover,
 			description,
-			authors: [],
-			status: 'Ongoing',
-			genres: [],
+			authors,
+			status,
+			genres,
 			chapters
 		};
 	}
 
+	// ── Chapter Pages ────────────────────────────────────────────────────────
+
 	async getChapterPages(chapterId: string): Promise<string[]> {
-		// Normalize path
-		let normalizedPath = chapterId;
-		if (!normalizedPath.startsWith('/series/') && !normalizedPath.startsWith('/series')) {
-			normalizedPath = '/series/' + normalizedPath.replace(/^\//, '');
+		let path = chapterId;
+		if (!path.startsWith('/comics/')) {
+			path = `/comics/${path.replace(/^\//, '')}`;
 		}
+		path = this.cleanId(path);
 
-		const html = await this.fetchHtml(normalizedPath);
+		const html = await this.fetchHtml(path);
 
-		// 1. Combine all script tags content that might contain the data
-		// Asura uses Next.js App Router, data is in self.__next_f.push
+		// 1) Primary: Astro island props JSON (entity-escaped)
+		const pagesFromProps = this.parseAstroPages(html);
+		if (pagesFromProps.length > 0) return pagesFromProps;
+
+		// 2) Fallback: img tags in reader
 		const $ = cheerio.load(html);
-		let scriptData = '';
-		$('script').each((i, el) => {
-			const content = $(el).html() || '';
-			if (content.includes('self.__next_f.push')) {
-				scriptData += content;
-			}
-		});
+		const pages: string[] = [];
+		const seen = new Set<string>();
 
-		// If cheerio fails to find scripts, fallback to raw html regex
-		if (!scriptData) scriptData = html;
+		const selectors = [
+			"img[src*='asura-images/chapters/']",
+			'#readerarea img:not([src*="asura-images/covers/"])',
+			'img.w-full.block:not([src*="asura-images/covers/"])',
+			'.reading-content img, #chapter-content img, .chapter-content img'
+		];
 
-		// 2. Regex to find the "pages" JSON array
-		// Pattern: "pages":[{ ... }]
-		// We look for escaped quote \"pages\" followed by the array
-		const pagesMatch = scriptData.match(/\\"pages\\":(\[.*?\])/);
-
-		if (!pagesMatch || !pagesMatch[1]) {
-			// Fallback: Sometimes it might not be escaped if the format changes
-			const fallbackMatch = scriptData.match(/"pages":(\[.*?\])/);
-			if (!fallbackMatch) {
-				console.error('Could not find pages data in script');
-				return [];
-			}
-			return this.parsePagesJson(fallbackMatch[1]);
+		for (const sel of selectors) {
+			$(sel).each((_, img) => {
+				let src = $(img).attr('src') || $(img).attr('data-src') || '';
+				src = this.absUrl(src);
+				if (src && !seen.has(src) && !src.includes('covers/')) {
+					seen.add(src);
+					pages.push(src);
+				}
+			});
+			if (pages.length > 0) break;
 		}
 
-		// 3. Clean the string and Parse JSON
-		// The data is often double-escaped in the script string
-		const rawJson = pagesMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-
-		return this.parsePagesJson(rawJson);
+		return pages;
 	}
 
-	private parsePagesJson(jsonString: string): string[] {
-		try {
-			const pages = JSON.parse(jsonString) as { order: number; url: string }[];
-
-			// Sort by order just in case
-			pages.sort((a, b) => a.order - b.order);
-
-			// Extract URLs
-			return pages.map((page) => {
-				const url = page.url;
-				if (url.startsWith('http')) return url;
-				// Fix relative URLs
-				return `https://gg.asuracomic.net${url.startsWith('/') ? '' : '/'}${url}`;
-			});
-		} catch (e) {
-			console.error('Failed to parse chapter pages JSON', e);
+	/**
+	 * Parse Astro island props that contain the pages array.
+	 * Format roughly: props="...&quot;pages&quot;:..."
+	 */
+	private parseAstroPages(html: string): string[] {
+		const pagesKey = html.indexOf('&quot;pages&quot;');
+		if (pagesKey === -1) {
+			// Try non-escaped version just in case
+			const m = html.match(/"pages"\s*:\s*(\[[\s\S]*?\])/);
+			if (m) {
+				try {
+					return this.extractUrlsFromPagesJson(JSON.parse(m[1]));
+				} catch {
+					/* ignore */
+				}
+			}
 			return [];
 		}
+
+		// Find the nearest props="..." that contains the pages key
+		let propsStart = -1;
+		let pos = 0;
+		while (true) {
+			const s = html.indexOf('props="', pos);
+			if (s === -1 || s > pagesKey) break;
+			propsStart = s + 7;
+			pos = s + 1;
+		}
+		if (propsStart === -1) return [];
+
+		const end = html.indexOf('"', propsStart);
+		if (end === -1) return [];
+
+		const raw = html.slice(propsStart, end);
+		const decoded = raw
+			.replace(/&quot;/g, '"')
+			.replace(/&#x27;/g, "'")
+			.replace(/&#39;/g, "'")
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&amp;/g, '&');
+
+		try {
+			const data = JSON.parse(decoded);
+			if (!data?.pages) return [];
+			return this.extractUrlsFromPagesJson(data.pages);
+		} catch (e) {
+			console.error('Failed to parse Astro pages props', e);
+			return [];
+		}
+	}
+
+	private extractUrlsFromPagesJson(pagesData: any): string[] {
+		// Astro often wraps as [1, [ [0, {url, width, height}], ... ]]
+		const arr = Array.isArray(pagesData)
+			? pagesData[1] ?? pagesData[0] ?? pagesData
+			: pagesData;
+
+		if (!Array.isArray(arr)) return [];
+
+		const urls: string[] = [];
+		const seen = new Set<string>();
+
+		for (const tup of arr) {
+			const po = tup?.[1] ?? tup?.[0] ?? tup;
+			if (!po || typeof po !== 'object') continue;
+
+			let u = po.url;
+			if (Array.isArray(u)) u = u[1] ?? u[0];
+			if (typeof u !== 'string' || !u) continue;
+
+			const url = this.absUrl(u);
+			if (!seen.has(url)) {
+				seen.add(url);
+				urls.push(url);
+			}
+		}
+		return urls;
 	}
 }
