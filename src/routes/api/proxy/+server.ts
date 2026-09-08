@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			// Map source IDs to their base URLs for proper referer
 			const sourceReferers: Record<string, string> = {
 				mangalife: 'https://manga4life.com',
-				asura: 'https://asuracomic.net',
+				asura: 'https://asurascans.com',
 				mangabat: 'https://mangabat.com'
 				// Add more as needed
 			};
