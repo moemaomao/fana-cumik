@@ -2,62 +2,71 @@ import { BaseSource } from '../BaseSource';
 import type { Chapter, Manga, MangaDetails } from '../types';
 
 /**
- * Hitomi.la adapter
- *
- * - Latest  : binary .nozomi index (ltn.hitomi.la)
- * - Detail  : galleries/{id}.js  → galleryinfo JSON
- * - Pages   : image URL dari hash + gg.js (CDN gold-usergeneratedcontent.net)
- *
- * Mapping:
- *   Gallery  → Manga
- *   1 chapter → semua file gambar gallery
+ * Hitomi.la – resilient for Cloudflare Workers
  */
 export class HitomiSource extends BaseSource {
 	id = 'hitomi';
 	name = 'Hitomi.la';
 	baseUrl = 'https://hitomi.la';
 
-	private readonly ltn = 'https://ltn.hitomi.la';
+	/** Coba beberapa host LTN (Worker sering block salah satu) */
+	private readonly ltnHosts = [
+		'https://ltn.hitomi.la',
+		'https://ltn.gold-usergeneratedcontent.net'
+	];
 	private readonly cdn = 'gold-usergeneratedcontent.net';
 
-	/** Cache gg.js routing (b & m) */
 	private ggB = '';
 	private ggM = new Set<number>();
 	private ggO = 0;
 	private ggLoadedAt = 0;
+	private workingLtn = '';
 
-	// ── Low-level fetch ──────────────────────────────────────────────────────
+	private headers(): Record<string, string> {
+		return {
+			'User-Agent':
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+			Referer: 'https://hitomi.la/',
+			Accept: '*/*'
+		};
+	}
 
-	private async fetchText(url: string, init?: RequestInit): Promise<string> {
-		const res = await fetch(url, {
-			...init,
-			headers: {
-				'User-Agent':
-					'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-				Referer: 'https://hitomi.la/',
-				...(init?.headers || {})
-			}
-		});
-		if (!res.ok) throw new Error(`Hitomi fetch failed ${res.status}: ${url}`);
+	private async fetchText(url: string): Promise<string> {
+		const res = await fetch(url, { headers: this.headers() });
+		if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
 		return res.text();
 	}
 
 	private async fetchBuffer(url: string, range?: string): Promise<ArrayBuffer> {
-		const headers: Record<string, string> = {
-			'User-Agent':
-				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-			Referer: 'https://hitomi.la/'
-		};
-		if (range) headers['Range'] = range;
-
-		const res = await fetch(url, { headers });
-		if (!res.ok && res.status !== 206) {
-			throw new Error(`Hitomi buffer fetch failed ${res.status}: ${url}`);
-		}
+		const h = this.headers();
+		if (range) h['Range'] = range;
+		const res = await fetch(url, { headers: h });
+		if (!res.ok && res.status !== 206) throw new Error(`HTTP ${res.status} ${url}`);
 		return res.arrayBuffer();
 	}
 
-	/** Parse gallery IDs from .nozomi (big-endian int32) */
+	/** Pilih LTN host yang bisa dihubungi */
+	private async resolveLtn(): Promise<string> {
+		if (this.workingLtn) return this.workingLtn;
+		for (const host of this.ltnHosts) {
+			try {
+				const res = await fetch(`${host}/gg.js`, {
+					headers: this.headers(),
+					method: 'HEAD'
+				});
+				if (res.ok || res.status === 405) {
+					this.workingLtn = host;
+					return host;
+				}
+			} catch {
+				/* try next */
+			}
+		}
+		// fallback default
+		this.workingLtn = this.ltnHosts[0];
+		return this.workingLtn;
+	}
+
 	private parseNozomi(buf: ArrayBuffer): number[] {
 		const view = new DataView(buf);
 		const ids: number[] = [];
@@ -67,12 +76,13 @@ export class HitomiSource extends BaseSource {
 		return ids;
 	}
 
-	/** Load / refresh gg.js routing rules */
 	private async ensureGg(): Promise<void> {
 		const now = Date.now();
 		if (this.ggB && now - this.ggLoadedAt < 30 * 60 * 1000) return;
 
-		const js = await this.fetchText(`${this.ltn}/gg.js?_=${now}`);
+		const ltn = await this.resolveLtn();
+		const js = await this.fetchText(`${ltn}/gg.js?_=${now}`);
+
 		const bMatch = js.match(/b:\s*['"]([^'"]+)['"]/);
 		this.ggB = bMatch?.[1] || '';
 
@@ -86,228 +96,177 @@ export class HitomiSource extends BaseSource {
 		this.ggLoadedAt = now;
 	}
 
-	/** gg.s(hash) – last 3 hex chars → decimal path segment */
 	private ggS(hash: string): string {
 		const m = hash.match(/(..)(.)$/);
 		if (!m) return '0';
 		return String(parseInt(m[2] + m[1], 16));
 	}
 
-	/** Build full image URL (webp preferred) */
 	private imageUrl(hash: string, ext: 'webp' | 'avif' = 'webp'): string {
 		const s = this.ggS(hash);
 		const flag = this.ggM.has(parseInt(s, 10)) ? 1 : 0;
 		const subdomain = `${ext[0]}${1 + (flag ^ this.ggO)}`;
-		// path: b + s + / + hash
-		const path = `${this.ggB}${s}/${hash}`;
-		return `https://${subdomain}.${this.cdn}/${path}.${ext}`;
+		return `https://${subdomain}.${this.cdn}/${this.ggB}${s}/${hash}.${ext}`;
 	}
 
-	/** Thumbnail URL (tn subdomain) */
 	private thumbUrl(hash: string): string {
-		const s = this.ggS(hash);
-		const flag = this.ggM.has(parseInt(s, 10)) ? 1 : 0;
-		const subdomain = `tn`;
-		// small thumb path often uses rearranged hash
 		const rearranged = hash.replace(/^.*(..)(.)$/, '$2/$1/' + hash);
-		return `https://${subdomain}.${this.cdn}/webpsmalltn/${rearranged}.webp`;
+		return `https://tn.${this.cdn}/webpsmalltn/${rearranged}.webp`;
 	}
 
-	/** Parse galleryinfo from galleries/{id}.js */
 	private parseGalleryInfo(js: string): any {
-		const jsonStr = js.replace(/^[^{]*/, '').replace(/;?\s*$/, '');
-		return JSON.parse(jsonStr);
+		const cleaned = js.replace(/^[\s\S]*?=\s*/, '').replace(/;?\s*$/, '');
+		return JSON.parse(cleaned);
 	}
 
 	private tagNames(arr: any[] | undefined, key: string): string[] {
 		if (!Array.isArray(arr)) return [];
-		return arr.map((t) => t?.[key] || t?.tag || t?.name || '').filter(Boolean);
+		return arr.map((t) => t?.[key] || t?.tag || '').filter(Boolean);
+	}
+
+	/** Ambil metadata 1 gallery; gagal → null (jangan throw) */
+	private async loadGalleryBrief(gid: number): Promise<Manga | null> {
+		try {
+			const ltn = await this.resolveLtn();
+			const js = await this.fetchText(`${ltn}/galleries/${gid}.js`);
+			const info = this.parseGalleryInfo(js);
+			const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
+			const hash = info.files?.[0]?.hash || '';
+			return {
+				id: String(gid),
+				title,
+				cover: hash ? this.thumbUrl(hash) : '',
+				sourceId: this.id
+			};
+		} catch (e) {
+			console.error(`[Hitomi] gallery ${gid}`, e);
+			return null;
+		}
 	}
 
 	// ── Catalog ──────────────────────────────────────────────────────────────
 
 	async getLatestManga(page: number): Promise<Manga[]> {
-		const p = Math.max(1, Number(page) || 1);
-		const perPage = 25;
-		const start = (p - 1) * perPage * 4; // 4 bytes per id
-		const end = start + perPage * 4 - 1;
+		try {
+			const p = Math.max(1, Number(page) || 1);
+			const perPage = 12; // kecilkan biar tidak timeout di Worker
+			const start = (p - 1) * perPage * 4;
+			const end = start + perPage * 4 - 1;
 
-		const buf = await this.fetchBuffer(
-			`${this.ltn}/index-all.nozomi`,
-			`bytes=${start}-${end}`
-		);
-		const ids = this.parseNozomi(buf);
-		if (ids.length === 0) return [];
+			const ltn = await this.resolveLtn();
+			const buf = await this.fetchBuffer(
+				`${ltn}/index-all.nozomi`,
+				`bytes=${start}-${end}`
+			);
+			const ids = this.parseNozomi(buf);
+			if (!ids.length) return [];
 
-		await this.ensureGg();
+			await this.ensureGg().catch(() => undefined);
 
-		// Fetch galleryinfo for each id (batch sequential to avoid hammering)
-		const mangas: Manga[] = [];
-		for (const gid of ids) {
-			try {
-				const js = await this.fetchText(`${this.ltn}/galleries/${gid}.js`);
-				const info = this.parseGalleryInfo(js);
-				const title =
-					info.title || info.japanese_title || `Gallery ${gid}`;
-				const firstHash = info.files?.[0]?.hash || '';
-				const cover = firstHash ? this.thumbUrl(firstHash) : '';
-
-				mangas.push({
-					id: String(gid),
-					title: String(title).trim(),
-					cover,
-					sourceId: this.id
-				});
-			} catch {
-				// skip broken gallery
+			// Parallel terbatas (max 4 sekaligus)
+			const mangas: Manga[] = [];
+			for (let i = 0; i < ids.length; i += 4) {
+				const chunk = ids.slice(i, i + 4);
+				const results = await Promise.all(chunk.map((id) => this.loadGalleryBrief(id)));
+				for (const m of results) if (m) mangas.push(m);
 			}
+			return mangas;
+		} catch (e) {
+			console.error('[Hitomi] getLatestManga', e);
+			return []; // Jangan throw → hindari 500 di UI
 		}
-		return mangas;
 	}
 
 	async searchManga(query: string): Promise<Manga[]> {
-		const q = (query || '').trim().toLowerCase().replace(/\s+/g, '_');
-		if (!q) return this.getLatestManga(1);
+		try {
+			const q = (query || '').trim().toLowerCase().replace(/\s+/g, '_');
+			if (!q) return this.getLatestManga(1);
 
-		// Simple tag / title search via nozomi when possible
-		// For free-text, try language:all index filtered client-side is too heavy;
-		// use tag nozomi if query looks like tag, else fall back to index + filter title.
-		let nozomiPath = 'index-all.nozomi';
-		if (q.includes(':')) {
-			// e.g. language:english, female:sole_female, type:manga
-			const [ns, ...rest] = q.split(':');
-			const val = rest.join(':');
-			if (ns === 'language') {
-				nozomiPath = `index-${val}.nozomi`;
-			} else if (ns === 'type') {
-				nozomiPath = `${val}-all.nozomi`;
-			} else {
-				nozomiPath = `tag/${ns}:${val}-all.nozomi`;
+			const ltn = await this.resolveLtn();
+			let path = 'index-all.nozomi';
+			if (q.includes(':')) {
+				const [ns, ...rest] = q.split(':');
+				const val = rest.join(':');
+				if (ns === 'language') path = `index-${val}.nozomi`;
+				else if (ns === 'type') path = `${val}-all.nozomi`;
+				else path = `tag/${ns}:${val}-all.nozomi`;
 			}
-		}
 
-		const buf = await this.fetchBuffer(
-			`${this.ltn}/${nozomiPath}`,
-			`bytes=0-99` // first 25
-		).catch(() => null);
-
-		let ids: number[] = [];
-		if (buf) {
-			ids = this.parseNozomi(buf);
-		} else {
-			// fallback latest
-			const latest = await this.fetchBuffer(
-				`${this.ltn}/index-all.nozomi`,
-				`bytes=0-99`
-			);
-			ids = this.parseNozomi(latest);
-		}
-
-		await this.ensureGg();
-		const mangas: Manga[] = [];
-
-		for (const gid of ids) {
+			let buf: ArrayBuffer;
 			try {
-				const js = await this.fetchText(`${this.ltn}/galleries/${gid}.js`);
-				const info = this.parseGalleryInfo(js);
-				const title = String(info.title || info.japanese_title || '').trim();
+				buf = await this.fetchBuffer(`${ltn}/${path}`, 'bytes=0-47');
+			} catch {
+				buf = await this.fetchBuffer(`${ltn}/index-all.nozomi`, 'bytes=0-47');
+			}
+
+			const ids = this.parseNozomi(buf);
+			await this.ensureGg().catch(() => undefined);
+
+			const mangas: Manga[] = [];
+			for (const gid of ids) {
+				const m = await this.loadGalleryBrief(gid);
+				if (!m) continue;
 				if (
 					q.includes(':') ||
-					title.toLowerCase().includes(q.replace(/_/g, ' '))
+					m.title.toLowerCase().includes(q.replace(/_/g, ' '))
 				) {
-					const firstHash = info.files?.[0]?.hash || '';
-					mangas.push({
-						id: String(gid),
-						title: title || `Gallery ${gid}`,
-						cover: firstHash ? this.thumbUrl(firstHash) : '',
-						sourceId: this.id
-					});
+					mangas.push(m);
 				}
-			} catch {
-				/* skip */
 			}
+			return mangas;
+		} catch (e) {
+			console.error('[Hitomi] searchManga', e);
+			return [];
 		}
-		return mangas;
 	}
-
-	// ── Details ──────────────────────────────────────────────────────────────
 
 	async getMangaDetails(mangaId: string): Promise<MangaDetails> {
 		const gid = String(mangaId).replace(/\D/g, '');
-		const js = await this.fetchText(`${this.ltn}/galleries/${gid}.js`);
+		const ltn = await this.resolveLtn();
+		const js = await this.fetchText(`${ltn}/galleries/${gid}.js`);
 		const info = this.parseGalleryInfo(js);
-
-		await this.ensureGg();
+		await this.ensureGg().catch(() => undefined);
 
 		const title = String(info.title || info.japanese_title || `Gallery ${gid}`).trim();
-		const firstHash = info.files?.[0]?.hash || '';
-		const cover = firstHash ? this.thumbUrl(firstHash) : '';
-
+		const hash = info.files?.[0]?.hash || '';
 		const artists = this.tagNames(info.artists, 'artist');
 		const groups = this.tagNames(info.groups, 'group');
-		const characters = this.tagNames(info.characters, 'character');
-		const parodies = this.tagNames(info.parodys || info.parodies, 'parody');
 		const tags = this.tagNames(info.tags, 'tag');
-
-		const genres = [
-			...tags.map((t) => t),
-			...characters.map((c) => `character:${c}`),
-			...parodies.map((p) => `series:${p}`)
-		];
-
-		const description = [
-			info.type ? `Type: ${info.type}` : '',
-			info.language_localname || info.language
-				? `Language: ${info.language_localname || info.language}`
-				: '',
-			artists.length ? `Artists: ${artists.join(', ')}` : '',
-			groups.length ? `Groups: ${groups.join(', ')}` : '',
-			info.files ? `Pages: ${info.files.length}` : ''
-		]
-			.filter(Boolean)
-			.join('\n');
-
-		// Satu chapter = seluruh gallery
-		const chapters: Chapter[] = [
-			{
-				id: gid,
-				title: 'Read',
-				number: 1,
-				date: info.date || ''
-			}
-		];
 
 		return {
 			id: gid,
 			sourceId: this.id,
 			title,
-			cover,
-			description,
+			cover: hash ? this.thumbUrl(hash) : '',
+			description: [
+				info.type && `Type: ${info.type}`,
+				(info.language_localname || info.language) &&
+					`Language: ${info.language_localname || info.language}`,
+				artists.length && `Artists: ${artists.join(', ')}`,
+				info.files && `Pages: ${info.files.length}`
+			]
+				.filter(Boolean)
+				.join('\n'),
 			authors: artists.length ? artists : groups,
-			genres,
+			genres: tags,
 			status: 'Completed',
-			chapters
+			chapters: [{ id: gid, title: 'Read', number: 1, date: info.date || '' }]
 		};
 	}
 
-	// ── Pages ────────────────────────────────────────────────────────────────
-
 	async getChapterPages(chapterId: string): Promise<string[]> {
 		const gid = String(chapterId).replace(/\D/g, '');
-		const js = await this.fetchText(`${this.ltn}/galleries/${gid}.js`);
+		const ltn = await this.resolveLtn();
+		const js = await this.fetchText(`${ltn}/galleries/${gid}.js`);
 		const info = this.parseGalleryInfo(js);
-		const files: any[] = info.files || [];
-
 		await this.ensureGg();
 
-		return files
-			.map((f) => {
-				const hash = f.hash;
-				if (!hash) return '';
-				// prefer webp, fallback avif if hasavif
-				if (f.haswebp !== 0) return this.imageUrl(hash, 'webp');
-				if (f.hasavif) return this.imageUrl(hash, 'avif');
-				return this.imageUrl(hash, 'webp');
+		return (info.files || [])
+			.map((f: any) => {
+				if (!f?.hash) return '';
+				if (f.haswebp !== 0) return this.imageUrl(f.hash, 'webp');
+				if (f.hasavif) return this.imageUrl(f.hash, 'avif');
+				return this.imageUrl(f.hash, 'webp');
 			})
 			.filter(Boolean);
 	}
