@@ -8,15 +8,13 @@
 
 import { AsuraSource } from './impl/Asura';
 import { WelomaSource } from './impl/weloma';
+import { HitomiSource } from './impl/Hitomi';
 import type { IMangaSource } from './types';
 
-// Registry of all available manga sources
 const sources: Record<string, IMangaSource> = {
 	asura: new AsuraSource(),
 	weloma: new WelomaSource(),
-	// Add more sources here:
-	// mangabat: new MangabatSource(),
-	// komikcast: new KomikcastSource(),
+	hitomi: new HitomiSource(),
 };
 
 /**
